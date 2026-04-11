@@ -17,6 +17,7 @@
 
 Traditional systems say `"Person detected"`.  
 Eagle says `"A person is loitering near the restricted exit and repeatedly looking at the keypad."` 
+<img width="633" height="572" alt="Untitled-2026-03-21-1849" src="https://github.com/user-attachments/assets/83321a94-19b1-47d5-8454-3acda70f3cdf" />
 
 [📖 Docs](#-documentation) · [🚀 Quick Start](#-quick-start) · [🗺️ Roadmap](#%EF%B8%8F-roadmap) · [🤝 Contribute](#-contributing)
 
