@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 Agentic Vision Surveillance System
+# 🧠 Eagle - Agentic Vision Surveillance System
 
 ### *Moving from Object Detection to Intent Inference*
 
@@ -13,10 +13,10 @@
 
 <br/>
 
-**Traditional CV detects → Agentic Vision *understands*.**
+**Traditional CV detects → Eagle *understands*.**
 
 Traditional systems say `"Person detected"`.  
-Agentic Vision says `"A person is loitering near the restricted exit and repeatedly looking at the keypad."` 
+Eagle says `"A person is loitering near the restricted exit and repeatedly looking at the keypad."` 
 
 [📖 Docs](#-documentation) · [🚀 Quick Start](#-quick-start) · [🗺️ Roadmap](#%EF%B8%8F-roadmap) · [🤝 Contribute](#-contributing)
 
@@ -41,7 +41,7 @@ Agentic Vision says `"A person is loitering near the restricted exit and repeate
 
 ## 🔍 What Is This?
 
-**Agentic Vision** is an open-source, production-grade surveillance AI system built for **GSSoC 2026**.
+**Eagle** is an open-source, production-grade surveillance AI system built for **GSSoC 2026**.
 
 Instead of rigid, rule-based alerts like:
 > ❌ `IF person near door > 10 sec → ALERT`
@@ -144,7 +144,7 @@ It uses a multimodal AI pipeline to produce:
 ## 📂 Project Structure
 
 ```
-agentic-vision/
+Eagle/
 │
 ├── apps/
 │   ├── backend/                # FastAPI main server
@@ -206,8 +206,8 @@ agentic-vision/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-org/agentic-vision.git
-cd agentic-vision
+git clone https://github.com/your-org/eagle.git
+cd eagle
 ```
 
 ### 2. Start infrastructure (Redis + backend)
@@ -361,6 +361,6 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 **Built with ❤️ for GSSoC 2026**
 
-[⭐ Star this repo](https://github.com/your-org/agentic-vision) · [🐛 Report a Bug](https://github.com/your-org/agentic-vision/issues) · [💡 Request a Feature](https://github.com/your-org/agentic-vision/issues)
+[⭐ Star this repo](https://github.com/your-org/agentic-vision) · [🐛 Report a Bug](https://github.com/your-org/agentic-vision/issues) · [💡 Request a Feature](https://github.com/your-org/eagle/issues)
 
 </div>
