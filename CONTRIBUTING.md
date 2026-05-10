@@ -30,7 +30,8 @@ Edit the files you want to improve.
 **Step 5: Commit your changes**
 
 ```bash
-git add .
+git status
+git add <your-changed-files>
 git commit -m "describe what you changed"
 ```
 
@@ -46,7 +47,7 @@ Then go to the original repo and click **Compare and pull request**.
 
 Looking for where to start? Check out our beginner-friendly issues:
 
-[Good First Issues](../../issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+[Good First Issues](/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 
 ## Code of Conduct
 
