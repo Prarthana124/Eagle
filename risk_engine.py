@@ -3,62 +3,98 @@ Risk Scoring Engine for Eagle Surveillance
 Author: Bhagyashri
 Issue: #19 - Multi-factor risk scoring algorithm
 """
+import unittest
 
 class RiskAnalyzer:
     def __init__(self):
-        # Step 1: Assign weights to different risk factors
-        # Yeh weights decide karenge ki kaunsi cheez kitni dangerous hai
+        # Updated weights based on Issue #19 requirements
         self.weights = {
-            "danger_zone": 50.0,       # Sabse highest risk
-            "restricted_zone": 30.0,   # Medium risk
-            "suspicious_item": 20.0,   # Like backpacks in secure areas
-            "base_person_risk": 10.0   # Normal presence
+            "danger_zone": 0.35,       
+            "restricted_zone": 0.35,   
+            "suspicious_item": 0.20,
+            "dwell_time": 0.20,
+            "interaction": 0.25,
+            "erratic_motion": 0.10,
+            "repeated_approach": 0.10
         }
 
-    def calculate_risk_score(self, label: str, zones_present: list) -> float:
+    def calculate_risk_score(
+        self, 
+        label: str, 
+        zones_present: list[str],
+        dwell_time_s: float = 0.0,
+        min_dwell_time_s: float = 60.0,
+        interaction_count: int = 0,
+        max_interactions: int = 3,
+        motion_type: str = "normal",
+        repeated_approach_count: int = 0
+    ) -> float:
         """
-        Calculates a risk score from 0 to 100 based on the detected object 
-        and the zone it is currently in.
+        Calculates a normalized risk score from 0.0 to 1.0 based on behavioral signals.
         """
         total_risk = 0.0
+        unauthorized_zone = ("danger" in zones_present) or ("restricted" in zones_present)
 
-        # Rule 1: Check the Zone (Location mapping)
-        # Agar object kisi unauthorized zone mein hai toh score badha do
-        if "danger" in zones_present:
-            total_risk += self.weights["danger_zone"]
-        elif "restricted" in zones_present:
+        # 1. Zone Check
+        if unauthorized_zone:
             total_risk += self.weights["restricted_zone"]
 
-        # Rule 2: Check for Suspicious Items
-        # Agar koi bag ya suitcase aisi jagah hai jahan nahi hona chahiye
-        if label in ["backpack", "handbag", "suitcase"]:
+        # 2. Suspicious Items (Only risky if in unauthorized zones)
+        if unauthorized_zone and label in ["backpack", "handbag", "suitcase"]:
             total_risk += self.weights["suspicious_item"]
 
-        # Rule 3: Base Risk for Human Presence
-        if label == "person":
-            total_risk += self.weights["base_person_risk"]
+        # 3. Dwell Time (How long they stayed)
+        if dwell_time_s > min_dwell_time_s:
+            total_risk += self.weights["dwell_time"]
 
-        # Final Rule: Normalize the score
-        # Make sure the score never goes beyond 100%
-        final_score = min(total_risk, 100.0)
-        
+        # 4. Interaction Count
+        if interaction_count > max_interactions:
+            total_risk += self.weights["interaction"]
+
+        # 5. Motion Type
+        if motion_type.lower() == "erratic":
+            total_risk += self.weights["erratic_motion"]
+
+        # 6. Repeated Approaches
+        if repeated_approach_count > 2:
+            total_risk += self.weights["repeated_approach"]
+
+        # Normalize to [0.0, 1.0] and round to 2 decimal places
+        final_score = round(min(max(total_risk, 0.0), 1.0), 2)
         return final_score
 
-# --- Local Testing (To check if our logic works) ---
-if __name__ == "__main__":
-    analyzer = RiskAnalyzer()
+# --- Professional Unit Tests ---
+class TestRiskAnalyzer(unittest.TestCase):
+    """Test suite to verify risk score combinations."""
     
-    # Test Scenario: A person carrying a backpack in a restricted zone
-    print("--- Eagle Risk Engine Test ---")
-    
-    # Test 1: Just a person in a safe zone
-    score_1 = analyzer.calculate_risk_score("person", ["safe"])
-    print(f"Test 1 (Person in Safe Zone) Risk Score: {score_1}/100")
-    
-    # Test 2: Backpack in restricted zone
-    score_2 = analyzer.calculate_risk_score("backpack", ["restricted"])
-    print(f"Test 2 (Backpack in Restricted Zone) Risk Score: {score_2}/100")
-    
-    # Test 3: Person in danger zone
-    score_3 = analyzer.calculate_risk_score("person", ["danger"])
-    print(f"Test 3 (Person in Danger Zone) Risk Score: {score_3}/100")
+    def setUp(self):
+        self.analyzer = RiskAnalyzer()
+
+    def test_safe_zone_person(self):
+        score = self.analyzer.calculate_risk_score("person", ["safe"])
+        self.assertEqual(score, 0.0)
+
+    def test_restricted_zone_backpack(self):
+        score = self.analyzer.calculate_risk_score("backpack", ["restricted"])
+        self.assertEqual(score, 0.55) # 0.35 (zone) + 0.20 (item)
+
+    def test_erratic_motion_and_dwell(self):
+        score = self.analyzer.calculate_risk_score(
+            "person", ["danger"], 
+            dwell_time_s=100.0, 
+            motion_type="erratic"
+        )
+        self.assertEqual(score, 0.65) # 0.35 + 0.20 + 0.10
+
+    def test_max_clamping(self):
+        score = self.analyzer.calculate_risk_score(
+            "backpack", ["danger"], 
+            dwell_time_s=100.0, 
+            interaction_count=5,
+            motion_type="erratic",
+            repeated_approach_count=3
+        )
+        self.assertEqual(score, 1.0) # Exceeds 1.0, should clamp to 1.0
+
+if __name__ == '__main__':
+    unittest.main()
