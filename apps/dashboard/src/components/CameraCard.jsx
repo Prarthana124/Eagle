@@ -1,8 +1,11 @@
 import { trackColors } from "../utils/colors"
 
-export default function CameraCard({ title, trackId }) {
+export default function CameraCard({ 
+  title = "Unknown Camera", 
+  trackId = "N/A" 
+}) {
 
-  const color = trackColors[trackId] || "#ffffff"
+  const color = trackColors[trackId] || "#6b7280"
 
   return (
     <div className="relative bg-gray-900 rounded-xl overflow-hidden h-[300px]">
@@ -15,10 +18,10 @@ export default function CameraCard({ title, trackId }) {
         className="absolute border-4"
         style={{
           borderColor: color,
-          top: "80px",
-          left: "120px",
-          width: "100px",
-          height: "180px"
+          top: "20%",
+          left: "30%",
+          width: "25%",
+          height: "40%",
         }}
       >
         <div
