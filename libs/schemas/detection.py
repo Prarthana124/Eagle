@@ -1,37 +1,31 @@
+"""
+Pydantic schemas for detection service output.
+These are the contracts between the detection service and tracking.
+"""
 from __future__ import annotations
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field
+from typing import Optional
 
 
 class BoundingBox(BaseModel):
-    x1: float
-    y1: float
-    x2: float
-    y2: float
-
-    @property
-    def center(self) -> tuple[float, float]:
-        return (self.x1 + self.x2) / 2, (self.y1 + self.y2) / 2
-
-    @property
-    def area(self) -> float:
-        return (self.x2 - self.x1) * (self.y2 - self.y1)
+    """Single bounding box in absolute pixel coordinates."""
+    x1: float = Field(..., description="Left edge")
+    y1: float = Field(..., description="Top edge")
+    x2: float = Field(..., description="Right edge")
+    y2: float = Field(..., description="Bottom edge")
 
 
 class DetectionSchema(BaseModel):
-    label: str
-    confidence: float
-    bbox: BoundingBox
-    zones_present: list[str] = []
-
-    @field_validator("confidence")
-    @classmethod
-    def confidence_must_be_valid(cls, v: float) -> float:
-        if not (0.0 <= v <= 1.0):
-            raise ValueError(f"confidence must be between 0.0 and 1.0, got {v}")
-        return v
+    """Single detection within a frame."""
+    label: str = Field(..., description="COCO class label, e.g. 'person'")
+    bbox: BoundingBox = Field(..., description="Bounding box coordinates")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence")
+    class_id: Optional[int] = Field(None, description="COCO class ID")
 
 
 class DetectionFrameSchema(BaseModel):
-    frame_id: int
-    timestamp_ms: float = 0.0
-    detections: list[DetectionSchema] = []
+    """Collection of detections for a single frame."""
+    frame_id: int = Field(..., description="Frame index")
+    camera_id: str = Field("cam_01", description="Camera identifier")
+    detections: list[DetectionSchema] = Field(default_factory=list)
+    timestamp_ms: float = Field(..., description="Frame timestamp in milliseconds")
