@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 
+import fakeredis
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -19,7 +20,6 @@ from scripts.inspect_tracks import (
 
 @pytest.fixture()
 def fake_redis():
-    fakeredis = pytest.importorskip("fakeredis")
     return fakeredis.FakeRedis()
 
 
@@ -30,7 +30,7 @@ def _seed_track(fake_redis, track_id: int = 3) -> None:
             {
                 "camera_id": "cam_01",
                 "track_id": track_id,
-                "global_id": "gid-3",
+                "global_id": f"gid-{track_id}",
                 "state": "ACTIVE",
                 "dwell_time_seconds": 4.1,
                 "zones_present": ["safe_corridor"],
