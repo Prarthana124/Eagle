@@ -123,35 +123,36 @@ class Tracker:
 
             tid  = int(t.track_id)
             # ── ReID matching ─────────────────────────────────────
-            if hasattr(t, "features") and t.features:
+            # ── ReID matching ─────────────────────────────────────
+    if hasattr(t, "features") and t.features:
 
-                new_embedding = t.features[-1]
+     new_embedding = t.features[-1]
 
-                for lost_id, data in list(self._lost_embeddings.items()):
+    for lost_id, data in list(self._lost_embeddings.items()):
 
-                    age = self._frame_id - data["last_seen"]
+        age = self._frame_id - data["last_seen"]
 
-                    if age > self.max_age:
-                        continue
+        if age > self.max_age:
+            continue
 
-                similarity = self._cosine_similarity(
-                    new_embedding,
-                    data["embedding"],
-                )
+        similarity = self._cosine_similarity(
+            new_embedding,
+            data["embedding"],
+        )
 
-            if similarity > self.REID_SIMILARITY_THRESHOLD:
+        if similarity > self.REID_SIMILARITY_THRESHOLD:
 
             # Restore original ID
-                tid = lost_id
-                t.track_id = lost_id
+            tid = lost_id
+            t.track_id = lost_id
 
-                del self._lost_embeddings[lost_id]
+            del self._lost_embeddings[lost_id]
 
-                logger.info(
+            logger.info(
                 f"ReID matched: restored track #{lost_id}"
             )
 
-                break
+            break
         
             ltwh = t.to_ltwh()
             x1 = float(ltwh[0])
@@ -229,6 +230,7 @@ class Tracker:
 
         for tid in expired_ids:
             del self._lost_embeddings[tid]
+
         return TrackedFrame(
             frame_id     = self._frame_id,
             camera_id    = self.camera_id,
@@ -267,15 +269,20 @@ class Tracker:
         self._lifecycle_queue.append(event)
         if self._event_logger is not None:
             self._event_logger.log_event(event)
-    def _cosine_similarity(
-                self,
-            a: np.ndarray,
-             b: np.ndarray,
-        ) -> float:
-            return float(
-            np.dot(a, b) /
-            (np.linalg.norm(a) * np.linalg.norm(b))
-        )
+def _cosine_similarity(
+        self,
+        a: np.ndarray,
+        b: np.ndarray,
+    ) -> float:
+
+        norm_product = np.linalg.norm(a) * np.linalg.norm(b)
+
+        if norm_product == 0:
+            return 0.0
+
+        return float(
+        np.dot(a, b) / norm_product
+    )
 
 # ─── CLI Demo ────────────────────────────────────────────────────────────────
 

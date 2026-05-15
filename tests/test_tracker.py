@@ -379,10 +379,10 @@ def test_reid_restores_original_id(MockDeepSort):
 
     assert restored_id == original_id
 
-    @patch("services.tracking.tracker.DeepSort")
-    def test_reid_rejects_low_similarity(MockDeepSort):
+@patch("services.tracking.tracker.DeepSort")
+def test_reid_rejects_low_similarity(MockDeepSort):
 
-        from services.tracking.tracker import Tracker
+    from services.tracking.tracker import Tracker
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
@@ -431,10 +431,10 @@ def test_reid_restores_original_id(MockDeepSort):
 
     assert result.tracks[0].track_id != 1
 
-    @patch("services.tracking.tracker.DeepSort")
-    def test_reid_expires_after_max_age(MockDeepSort):
+@patch("services.tracking.tracker.DeepSort")
+def test_reid_expires_after_max_age(MockDeepSort):
 
-        from services.tracking.tracker import Tracker
+    from services.tracking.tracker import Tracker
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
