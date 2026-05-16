@@ -14,6 +14,7 @@ class Zone:
     polygon: list[tuple[int, int]]  # list of (x, y) corner points
     alert_on_entry: bool = True
     color_bgr: tuple[int, int, int] = (0, 0, 255)  # red by default
+    max_age_override: int | None = None
 
     def as_array(self) -> np.ndarray:
         """Return polygon as numpy array for cv2.pointPolygonTest."""
@@ -27,12 +28,14 @@ DEFAULT_ZONES: list[Zone] = [
         polygon=[(540, 200), (740, 200), (740, 480), (540, 480)],
         alert_on_entry=True,
         color_bgr=(0, 0, 255),      # red
+        max_age_override=60,
     ),
     Zone(
         name="keypad_area",
         polygon=[(620, 280), (720, 280), (720, 420), (620, 420)],
         alert_on_entry=True,
         color_bgr=(0, 165, 255),    # orange
+        max_age_override=15,
     ),
     Zone(
         name="safe_corridor",
