@@ -14,6 +14,16 @@ class BoundingBox(BaseModel):
     x2: float = Field(..., description="Right edge")
     y2: float = Field(..., description="Bottom edge")
 
+    @property
+    def center(self) -> tuple[float, float]:
+        """Return (cx, cy) center of the bounding box."""
+        return ((self.x1 + self.x2) / 2, (self.y1 + self.y2) / 2)
+
+    @property
+    def area(self) -> float:
+        """Return area of the bounding box in square pixels."""
+        return (self.x2 - self.x1) * (self.y2 - self.y1)
+
 
 class DetectionSchema(BaseModel):
     """Single detection within a frame."""
@@ -28,4 +38,4 @@ class DetectionFrameSchema(BaseModel):
     frame_id: int = Field(..., description="Frame index")
     camera_id: str = Field("cam_01", description="Camera identifier")
     detections: list[DetectionSchema] = Field(default_factory=list)
-    timestamp_ms: float = Field(..., description="Frame timestamp in milliseconds")
+    timestamp_ms: float = Field(0.0, description="Frame timestamp in milliseconds")
