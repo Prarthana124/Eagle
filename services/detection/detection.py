@@ -19,8 +19,10 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
+from libs.schemas.detection import DetectionFrameSchema as DetectionFrame, DetectionSchema as Detection, BoundingBox
 from services.detection.zones import DEFAULT_ZONES, get_zones_for_point
+from services.reasoning.scene_graph import SceneGraphBuilder
+from services.reasoning.prompts import build_reasoning_prompt
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -77,7 +79,7 @@ class Detector:
 
             detections.append(Detection(
                 label=label,
-                bbox=[x1, y1, x2, y2],
+                bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
                 confidence=float(conf),
                 center=(cx, cy),
                 zones_present=zones,
@@ -116,7 +118,7 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
 
     # Draw detections
     for det in det_frame.detections:
-        x1, y1, x2, y2 = [int(v) for v in det.bbox]
+        x1, y1, x2, y2 = int(det.bbox.x1), int(det.bbox.y1), int(det.bbox.x2), int(det.bbox.y2)
         color = LABEL_COLORS.get(det.label, (200, 200, 200))
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
 
