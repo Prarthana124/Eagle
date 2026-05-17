@@ -22,9 +22,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 
 import redis as redis_sync
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
 from prometheus_client import generate_latest
 
@@ -47,6 +48,9 @@ app = FastAPI(
 REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 _redis: redis_sync.Redis | None = None
+
+# Regex for safe camera_id values — prevents Redis glob injection.
+_CAMERA_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _get_redis() -> redis_sync.Redis | None:
@@ -80,9 +84,12 @@ app.include_router(feedback_router)
 # ── Health endpoint ───────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["ops"])
-async def health() -> dict:
+def health() -> dict:
     """
     Return server and Redis health.
+
+    Uses a synchronous handler to avoid blocking the event loop with
+    sync Redis calls (ping).
 
     Responses
     ---------
@@ -102,28 +109,38 @@ async def health() -> dict:
         r.ping()
         return {"status": "ok", "redis": "connected"}
     except Exception as exc:
-        # Redis was reachable at startup but is now down.
+        # Redis was reachable at startup but is now down — reset so the
+        # next request triggers a fresh connection attempt.
         global _redis
-        _redis = None          # force reconnect attempt on next call
+        _redis = None
         return {"status": "degraded", "redis": str(exc)}
 
 
 # ── Tracks endpoint ───────────────────────────────────────────────────────────
 
 @app.get("/tracks", tags=["tracks"])
-async def list_active_tracks(
-    camera_id: str = Query(default="cam_01", description="Camera identifier"),
+def list_active_tracks(
+    camera_id: str = Query(
+        default="cam_01",
+        description="Camera identifier",
+        pattern=r"^[A-Za-z0-9_-]+$",
+    ),
 ) -> dict:
     """
     Return active track IDs for a camera.
 
-    Scans Redis for keys matching ``track:{camera_id}:*`` and returns the
-    integer track IDs whose stored state is ``ACTIVE``.
+    Uses a synchronous handler to avoid blocking the event loop with
+    sync Redis calls (scan_iter, get).
+
+    Scans Redis for keys matching ``track:{camera_id}:*`` using a
+    cursor-based SCAN (O(1) per batch, safe for large keyspaces) and
+    returns the integer track IDs whose stored state is ``ACTIVE``.
 
     Query Parameters
     ----------------
     camera_id : str
-        Camera identifier (default: ``cam_01``).
+        Camera identifier restricted to ``[A-Za-z0-9_-]`` to prevent
+        Redis glob injection (default: ``cam_01``).
 
     Responses
     ---------
@@ -141,19 +158,28 @@ async def list_active_tracks(
 
     try:
         pattern = f"track:{camera_id}:*"
-        keys: list[bytes] = r.keys(pattern)
-
         active_ids: list[int] = []
-        for key in keys:
+
+        # scan_iter uses cursor-based SCAN — O(1) per batch, never blocks Redis.
+        for key in r.scan_iter(match=pattern, count=500):
             raw = r.get(key)
             if raw is None:
                 continue
             try:
                 record = json.loads(raw)
             except (json.JSONDecodeError, ValueError):
+                logger.debug("Skipping corrupt record at key %s", key)
                 continue
-            if record.get("state") == "ACTIVE":
-                active_ids.append(int(record["track_id"]))
+
+            if record.get("state") != "ACTIVE":
+                continue
+
+            # Guard against missing or malformed track_id in a single record.
+            try:
+                active_ids.append(int(record.get("track_id")))
+            except (TypeError, ValueError):
+                logger.debug("Skipping record with invalid track_id: %s", record.get("track_id"))
+                continue
 
         return {"camera_id": camera_id, "track_ids": sorted(active_ids)}
 
@@ -165,6 +191,6 @@ async def list_active_tracks(
 # ── Metrics endpoint ──────────────────────────────────────────────────────────
 
 @app.get("/metrics", tags=["ops"], include_in_schema=False)
-async def metrics() -> Response:
+def metrics() -> Response:
     """Prometheus metrics scrape endpoint."""
     return Response(generate_latest(), media_type="text/plain")

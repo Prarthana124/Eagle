@@ -59,15 +59,22 @@ def app_with_redis(fake_redis_client):
 @pytest.fixture()
 def app_without_redis():
     """
-    Return the FastAPI app with Redis forcibly set to None to simulate
-    an unreachable Redis server.
+    Return the FastAPI app with ``_get_redis`` patched to always return
+    None, deterministically simulating an unreachable Redis server.
+
+    Patching the helper directly (rather than just setting ``_redis = None``)
+    prevents the lazy-init path from attempting a real Redis connection
+    during tests.
     """
     import apps.backend.main as backend
 
-    original = backend._redis
+    original_get_redis = backend._get_redis
+    original_redis = backend._redis
+    backend._get_redis = lambda: None
     backend._redis = None
     yield backend.app
-    backend._redis = original
+    backend._get_redis = original_get_redis
+    backend._redis = original_redis
 
 
 # ── /health tests ─────────────────────────────────────────────────────────────
@@ -283,3 +290,17 @@ async def test_tracks_ids_are_sorted(app_with_redis, fake_redis_client):
 
     body = response.json()
     assert body["track_ids"] == sorted(body["track_ids"])
+
+
+@pytest.mark.asyncio
+async def test_tracks_rejects_invalid_camera_id(app_with_redis):
+    """
+    /tracks must return 422 when camera_id contains characters outside
+    [A-Za-z0-9_-], preventing Redis glob injection (e.g. camera_id="*").
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=app_with_redis), base_url="http://test"
+    ) as client:
+        response = await client.get("/tracks", params={"camera_id": "*"})
+
+    assert response.status_code == 422
