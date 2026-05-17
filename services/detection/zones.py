@@ -21,7 +21,16 @@ class Zone:
     """Wrapper for a zone loaded from YAML to provide geometric utilities."""
     def __init__(self, data: dict):
         self.name = data.get("name", "Unknown")
-        self.polygon = data.get("polygon", [])
+        
+        # Validate polygon points
+        self.polygon = []
+        for point in data.get("polygon", []):
+            if isinstance(point, (list, tuple)) and len(point) == 2:
+                try:
+                    self.polygon.append([int(point[0]), int(point[1])])
+                except (ValueError, TypeError):
+                    pass
+        self.valid = len(self.polygon) >= 3
         
         # Convert hex color to BGR for OpenCV
         hex_color = data.get("color_hex", "#FF0000").lstrip("#")
@@ -34,6 +43,8 @@ class Zone:
             self.color_bgr = (0, 0, 255) # Fallback to Red
             
     def as_array(self) -> np.ndarray:
+        if not self.valid:
+            return np.array([])
         return np.array(self.polygon, dtype=np.int32)
 
 
@@ -53,12 +64,13 @@ def get_camera_id() -> str | None:
 DEFAULT_ZONES = get_zones()
 
 
-def get_zones_for_point(x: float, y: float) -> list[Zone]:
+def get_zones_for_point(x: float, y: float, zones: list[Zone] | None = None) -> list[Zone]:
     """
     Return a list of zones that contain the given point (x, y).
     """
     matched_zones = []
-    for z in get_zones():
+    _zones = zones if zones is not None else get_zones()
+    for z in _zones:
         pts = z.as_array()
         if len(pts) >= 3:
             # pointPolygonTest returns +ve if inside, 0 if on edge, -ve if outside

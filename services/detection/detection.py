@@ -20,7 +20,7 @@ import numpy as np
 from ultralytics import YOLO
 
 from libs.schemas.detection import DetectionFrameSchema as DetectionFrame, DetectionSchema as Detection, BoundingBox
-from services.detection.zones import DEFAULT_ZONES, get_zones_for_point
+from services.detection.zones import get_zones, get_zones_for_point
 from services.reasoning.scene_graph import SceneGraphBuilder
 from services.reasoning.prompts import build_reasoning_prompt
 
@@ -63,6 +63,8 @@ class Detector:
         results = self.model(frame, conf=self.conf, device=self.device, verbose=False)
         detections: list[Detection] = []
 
+        active_zones = get_zones()
+
         for box, conf, cls_id in zip(
             results[0].boxes.xyxy.cpu().numpy(),
             results[0].boxes.conf.cpu().numpy(),
@@ -75,7 +77,7 @@ class Detector:
             x1, y1, x2, y2 = box.tolist()
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
-            zones = [z.name for z in get_zones_for_point(cx, cy)]
+            zones = [z.name for z in get_zones_for_point(cx, cy, zones=active_zones)]
 
             detections.append(Detection(
                 label=label,
@@ -106,8 +108,12 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
     """Draw bounding boxes, labels, and zone overlays onto frame."""
     out = frame.copy()
 
+    active_zones = get_zones()
+
     # Draw zone polygons
-    for zone in DEFAULT_ZONES:
+    for zone in active_zones:
+        if not getattr(zone, 'valid', True):
+            continue
         pts = zone.as_array().reshape((-1, 1, 2))
         overlay = out.copy()
         cv2.fillPoly(overlay, [pts], zone.color_bgr)
