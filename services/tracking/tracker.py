@@ -362,3 +362,35 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+def _interpolate_trajectory(
+    last_pos: dict, 
+    new_pos: dict, 
+    gap_frames: int, 
+    start_frame_id: int
+) -> list:
+    """Fills trajectory gaps using linear interpolation for temporary missed detections."""
+    if gap_frames <= 0:
+        return []
+
+    interpolated_points = []
+    total_steps = gap_frames + 1
+    
+    x_step = (new_pos['x'] - last_pos['x']) / total_steps
+    y_step = (new_pos['y'] - last_pos['y']) / total_steps
+    
+    for i in range(1, gap_frames + 1):
+        point = {
+            "frame_id": start_frame_id + (i - 1),
+            "x": round(last_pos['x'] + (x_step * i), 2),
+            "y": round(last_pos['y'] + (y_step * i), 2),
+            "interpolated": True
+        }
+        
+        if all(k in last_pos and k in new_pos for k in ('w', 'h')):
+            point['w'] = round(last_pos['w'] + (((new_pos['w'] - last_pos['w']) / total_steps) * i), 2)
+            point['h'] = round(last_pos['h'] + (((new_pos['h'] - last_pos['h']) / total_steps) * i), 2)
+            
+        interpolated_points.append(point)
+        
+    return interpolated_points

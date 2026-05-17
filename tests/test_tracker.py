@@ -485,3 +485,31 @@ def test_reid_expires_after_max_age(MockDeepSort):
 
     # Should NOT restore old ID
     assert result.tracks[0].track_id == 99
+    import pytest
+from services.tracking.tracker import _interpolate_trajectory
+
+def test_interpolate_trajectory_success():
+    last_pos = {"x": 10.0, "y": 20.0, "w": 50.0, "h": 50.0}
+    new_pos = {"x": 50.0, "y": 60.0, "w": 90.0, "h": 90.0}
+    gap_frames = 3
+    start_frame = 101
+    result = _interpolate_trajectory(last_pos, new_pos, gap_frames, start_frame)
+    assert len(result) == 3
+    assert result[0]["frame_id"] == 101
+    assert result[0]["interpolated"] is True
+    assert result[0]["x"] == 20.0
+    assert result[0]["y"] == 30.0
+
+def test_interpolate_trajectory_no_gap():
+    last_pos = {"x": 10, "y": 20}
+    new_pos = {"x": 20, "y": 30}
+    assert _interpolate_trajectory(last_pos, new_pos, 0, 100) == []
+
+def test_interpolate_trajectory_no_movement():
+    last_pos = {"x": 100.0, "y": 100.0}
+    new_pos = {"x": 100.0, "y": 100.0}
+    gap_frames = 2
+    start_frame = 50
+    result = _interpolate_trajectory(last_pos, new_pos, gap_frames, start_frame)
+    assert len(result) == 2
+    assert result[0]["x"] == 100.0
