@@ -10,6 +10,7 @@ Usage (standalone):
 Usage (CLI demo):
     python tracker.py --source data/sample_videos/sample.mp4
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,13 +23,22 @@ import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
 # ── adjust sys.path so we can import sibling packages ──────────────────────
-import sys, os
+import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repo root
 
 from libs.schemas.detection import DetectionFrameSchema
-from libs.schemas.tracking  import (
-    TrackedObject, TrackedFrame, TrackState,
-    TrajectoryPoint, TrackLifecycleEvent,
+from libs.schemas.tracking import (
+    TrackedObject,
+    TrackedFrame,
+    TrackState,
+    TrajectoryPoint,
+    TrackLifecycleEvent,
+)
+from libs.observability.metrics import (
+    active_tracks,
+    frames_processed_total,
+    track_dwell_seconds,
 )
 from libs.logging.track_event_logger import TrackEventLogger
 from services.detection.zones import get_zones_for_point
@@ -48,37 +58,38 @@ class Tracker:
     - Lifecycle event emission (BORN / LOST / DEAD)
     """
 
-    MAX_TRAJECTORY_LEN = 80   # max trajectory points stored per track
-    FPS_DEFAULT        = 30
+    MAX_TRAJECTORY_LEN = 80  # max trajectory points stored per track
+    FPS_DEFAULT = 30
 
     def __init__(
         self,
-        fps: float          = FPS_DEFAULT,
-        max_age: int        = 30,       # frames before a lost track is marked DEAD
-        n_init: int         = 3,        # frames before a track is CONFIRMED
+        fps: float = FPS_DEFAULT,
+        max_age: int = 30,  # frames before a lost track is marked DEAD
+        n_init: int = 3,  # frames before a track is CONFIRMED
         max_cosine_distance: float = 0.4,
-        camera_id: str      = "cam_01",
+        camera_id: str = "cam_01",
         event_logger: TrackEventLogger | None = None,
-        reid_similarity_threshold: float = 0.85,  
+        reid_similarity_threshold: float = 0.85,
     ) -> None:
-        self.fps       = fps
+        self.fps = fps
         self.camera_id = camera_id
-        self.max_age   = max_age   # NEW
-        self.REID_SIMILARITY_THRESHOLD = reid_similarity_threshold  
+        self.max_age = max_age  # NEW
+        self.REID_SIMILARITY_THRESHOLD = reid_similarity_threshold
 
-        self._tracker  = DeepSort(
-            max_age              = max_age,
-            n_init               = n_init,
-            max_cosine_distance  = max_cosine_distance,
-            nn_budget            = 100,
+        self._tracker = DeepSort(
+            max_age=max_age,
+            n_init=n_init,
+            max_cosine_distance=max_cosine_distance,
+            nn_budget=100,
         )
         # Internal state
-        self._active_tracks:   dict[int, TrackedObject] = {}
-        self._known_ids:       set[int]                 = set()
-        self._frame_id:        int                      = 0
+        self._active_tracks: dict[int, TrackedObject] = {}
+        self._known_ids: set[int] = set()
+        self._frame_id: int = 0
         self._lifecycle_queue: list[TrackLifecycleEvent] = []
-        self._event_logger:    TrackEventLogger | None   = event_logger
+        self._event_logger: TrackEventLogger | None = event_logger
         self._lost_embeddings: dict[int, dict] = {}
+        self._active_embeddings: dict[int, np.ndarray] = {}
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -98,17 +109,18 @@ class Tracker:
             TrackedFrame with all confirmed tracks, dwell times, trajectories.
         """
         self._frame_id = det_frame.frame_id
+        frames_processed_total.inc()
 
         # ── Convert Pydantic detections → DeepSort input format ───────────
         # DeepSort expects: list of ([left, top, w, h], confidence, label)
         ds_input = []
         for det in det_frame.detections:
-            if det.label != "person":   # track persons only in this phase
+            if det.label != "person":  # track persons only in this phase
                 continue
             b = det.bbox
-            l, t = b.x1, b.y1
+            left, top = b.x1, b.y1
             w, h = b.x2 - b.x1, b.y2 - b.y1
-            ds_input.append(([l, t, w, h], float(det.confidence), "person"))
+            ds_input.append(([left, top, w, h], float(det.confidence), "person"))
 
         # ── Run tracker ────────────────────────────────────────────────────
         raw_tracks = self._tracker.update_tracks(ds_input, frame=raw_frame)
@@ -121,39 +133,30 @@ class Tracker:
             if not t.is_confirmed():
                 continue
 
-            tid  = int(t.track_id)
+            tid = int(t.track_id)
+
             # ── ReID matching ─────────────────────────────────────
-            # ── ReID matching ─────────────────────────────────────
-    if hasattr(t, "features") and t.features:
+            if hasattr(t, "features") and t.features:
+                new_embedding = t.features[-1]
+                self._active_embeddings[tid] = new_embedding
 
-     new_embedding = t.features[-1]
+                for lost_id, data in list(self._lost_embeddings.items()):
+                    age = self._frame_id - data["last_seen"]
+                    if age > self.max_age:
+                        continue
 
-    for lost_id, data in list(self._lost_embeddings.items()):
+                    similarity = self._cosine_similarity(
+                        new_embedding,
+                        data["embedding"],
+                    )
 
-        age = self._frame_id - data["last_seen"]
+                    if similarity > self.REID_SIMILARITY_THRESHOLD:
+                        tid = lost_id
+                        t.track_id = lost_id
+                        del self._lost_embeddings[lost_id]
+                        logger.info("ReID matched: restored track #%s", lost_id)
+                        break
 
-        if age > self.max_age:
-            continue
-
-        similarity = self._cosine_similarity(
-            new_embedding,
-            data["embedding"],
-        )
-
-        if similarity > self.REID_SIMILARITY_THRESHOLD:
-
-            # Restore original ID
-            tid = lost_id
-            t.track_id = lost_id
-
-            del self._lost_embeddings[lost_id]
-
-            logger.info(
-                f"ReID matched: restored track #{lost_id}"
-            )
-
-            break
-        
             ltwh = t.to_ltwh()
             x1 = float(ltwh[0])
             y1 = float(ltwh[1])
@@ -172,59 +175,75 @@ class Tracker:
             # ── Dwell time ────────────────────────────────────────────────
             prev = self._active_tracks.get(tid)
             dwell_frames = (prev.dwell_time_frames + 1) if prev else 1
-            dwell_secs   = dwell_frames / self.fps
+            dwell_secs = dwell_frames / self.fps
 
             # ── Trajectory ────────────────────────────────────────────────
             prev_traj = prev.trajectory if prev else []
             new_point = TrajectoryPoint(x=cx, y=cy, frame_id=self._frame_id)
-            trajectory = (prev_traj + [new_point])[-self.MAX_TRAJECTORY_LEN:]
+            trajectory = (prev_traj + [new_point])[-self.MAX_TRAJECTORY_LEN :]
 
             obj = TrackedObject(
-                track_id            = tid,
-                label               = "person",
-                bbox                = [x1, y1, x2, y2],
-                confidence          = float(t.det_conf or 0.0),
-                center              = (cx, cy),
-                dwell_time_frames   = dwell_frames,
-                dwell_time_seconds  = round(dwell_secs, 2),
-                state               = TrackState.ACTIVE,
-                trajectory          = trajectory,
-                zones_present       = zones,
-                last_seen_frame     = self._frame_id,
+                track_id=tid,
+                label="person",
+                bbox=[x1, y1, x2, y2],
+                confidence=float(t.det_conf or 0.0),
+                center=(cx, cy),
+                dwell_time_frames=dwell_frames,
+                dwell_time_seconds=round(dwell_secs, 2),
+                state=TrackState.ACTIVE,
+                trajectory=trajectory,
+                zones_present=zones,
+                last_seen_frame=self._frame_id,
             )
             self._active_tracks[tid] = obj
             current_ids.add(tid)
             tracked_objects.append(obj)
 
+        active_tracks.set(len(tracked_objects))
+        for obj in tracked_objects:
+            track_dwell_seconds.observe(obj.dwell_time_seconds)
+
         # ── Lifecycle: LOST for tracks that disappeared ────────────────────
         for tid, prev_obj in list(self._active_tracks.items()):
             if tid not in current_ids:
                 frames_since = self._frame_id - prev_obj.last_seen_frame
+                track = None
                 if frames_since == 1:
                     track = next((t for t in raw_tracks if int(t.track_id) == tid), None)
 
-                if track is not None and hasattr(track, "features") and track.features:
+                embedding = None
+                if frames_since == 1:
+                    if track is not None and hasattr(track, "features") and track.features:
+                        embedding = track.features[-1]
+                    else:
+                        embedding = self._active_embeddings.get(tid)
+
+                if frames_since == 1 and embedding is not None:
                     self._lost_embeddings[tid] = {
-                        "embedding": track.features[-1],
+                        "embedding": embedding,
                         "last_seen": self._frame_id,
-                }
+                    }
 
                 self._emit_lifecycle(
-                    TrackState.LOST, tid,
+                    TrackState.LOST,
+                    tid,
                     prev_obj.zones_present,
                     prev_obj.dwell_time_seconds,
                 )
-                if frames_since > self._tracker.max_age:
+                if frames_since >= self._tracker.max_age:
                     self._emit_lifecycle(
-                        TrackState.DEAD, tid,
+                        TrackState.DEAD,
+                        tid,
                         prev_obj.zones_present,
                         prev_obj.dwell_time_seconds,
                     )
                     del self._active_tracks[tid]
+                    self._active_embeddings.pop(tid, None)
                     logger.info(f"Track DEAD: #{tid} after {prev_obj.dwell_time_seconds:.1f}s")
         # ── Cleanup expired ReID embeddings ──────────────────
         expired_ids = [
-            tid for tid, data in self._lost_embeddings.items()
+            tid
+            for tid, data in self._lost_embeddings.items()
             if self._frame_id - data["last_seen"] > self.max_age
         ]
 
@@ -232,11 +251,11 @@ class Tracker:
             del self._lost_embeddings[tid]
 
         return TrackedFrame(
-            frame_id     = self._frame_id,
-            camera_id    = self.camera_id,
-            tracks       = tracked_objects,
-            timestamp_ms = time.time() * 1000,
-            fps          = self.fps,
+            frame_id=self._frame_id,
+            camera_id=self.camera_id,
+            tracks=tracked_objects,
+            timestamp_ms=time.time() * 1000,
+            fps=self.fps,
         )
 
     def drain_lifecycle_events(self) -> list[TrackLifecycleEvent]:
@@ -258,53 +277,53 @@ class Tracker:
         dwell_secs: float,
     ) -> None:
         event = TrackLifecycleEvent(
-            event              = state,
-            track_id           = track_id,
-            frame_id           = self._frame_id,
-            camera_id          = self.camera_id,
-            zones_present      = zones,
-            dwell_time_seconds = dwell_secs,
-            timestamp_ms       = time.time() * 1000,
+            event=state,
+            track_id=track_id,
+            frame_id=self._frame_id,
+            camera_id=self.camera_id,
+            zones_present=zones,
+            dwell_time_seconds=dwell_secs,
+            timestamp_ms=time.time() * 1000,
         )
         self._lifecycle_queue.append(event)
         if self._event_logger is not None:
             self._event_logger.log_event(event)
-def _cosine_similarity(
+
+    def _cosine_similarity(
         self,
         a: np.ndarray,
         b: np.ndarray,
     ) -> float:
-
         norm_product = np.linalg.norm(a) * np.linalg.norm(b)
-
         if norm_product == 0:
             return 0.0
 
-        return float(
-        np.dot(a, b) / norm_product
-    )
+        return float(np.dot(a, b) / norm_product)
+
 
 # ─── CLI Demo ────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     import sys
+
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from services.detection.detector import Detector
     from services.tracking.visualizer import draw_tracks
 
     parser = argparse.ArgumentParser(description="Phase 2 — Tracking demo")
     parser.add_argument("--source", default="0")
-    parser.add_argument("--model",  default="yolov8n.pt")
+    parser.add_argument("--model", default="yolov8n.pt")
     parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
-    source   = int(args.source) if args.source.isdigit() else args.source
+    source = int(args.source) if args.source.isdigit() else args.source
     detector = Detector(model_name=args.model)
-    cap      = cv2.VideoCapture(source)
-    fps      = cap.get(cv2.CAP_PROP_FPS) or 30
-    tracker  = Tracker(fps=fps)
+    cap = cv2.VideoCapture(source)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    tracker = Tracker(fps=fps)
 
-    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     writer = None
     if args.output:
@@ -317,14 +336,16 @@ def main() -> None:
         if not ret:
             break
 
-        det_frame             = detector.detect(frame, frame_id=frame_id)
-        tracked_frame         = tracker.update(det_frame, frame)
-        annotated             = draw_tracks(frame, tracked_frame)
+        det_frame = detector.detect(frame, frame_id=frame_id)
+        tracked_frame = tracker.update(det_frame, frame)
+        annotated = draw_tracks(frame, tracked_frame)
 
         # Drain lifecycle events (Phase 3 will store these in Redis)
         for evt in tracker.drain_lifecycle_events():
-            logger.info(f"Lifecycle: {evt.event} track #{evt.track_id} "
-                        f"dwell={evt.dwell_time_seconds:.1f}s zones={evt.zones_present}")
+            logger.info(
+                f"Lifecycle: {evt.event} track #{evt.track_id} "
+                f"dwell={evt.dwell_time_seconds:.1f}s zones={evt.zones_present}"
+            )
 
         cv2.imshow("Agentic Vision — Tracking", annotated)
         if writer:

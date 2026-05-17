@@ -14,33 +14,16 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from services.reasoning.prompts import build_reasoning_prompt
 
 import cv2
 import numpy as np
-from pydantic import BaseModel
-from services.reasoning.scene_graph import SceneGraphBuilder
 from ultralytics import YOLO
 
+from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
 from services.detection.zones import DEFAULT_ZONES, get_zones_for_point
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# ─── Output Schema ────────────────────────────────────────────────────────────
-
-class Detection(BaseModel):
-    label: str
-    bbox: list[float]           # [x1, y1, x2, y2] absolute pixels
-    confidence: float
-    center: tuple[float, float] # (cx, cy)
-    zones_present: list[str]    # names of zones the centroid falls in
-
-
-class DetectionFrame(BaseModel):
-    frame_id: int
-    detections: list[Detection]
-    timestamp_ms: float
 
 
 # ─── Detector Class ──────────────────────────────────────────────────────────
