@@ -1,4 +1,4 @@
-﻿"""
+"""
 services/detection/zones.py
 Zone definitions are now loaded from config/zones.yaml via ZoneConfigLoader.
 Set ZONES_CONFIG_PATH env var to override the default config location.
@@ -81,11 +81,12 @@ class _Zone:
     __slots__ = ("name",)
 
     def __init__(self, name: str) -> None:
+        """Store the zone name."""
         self.name = name
 
     def __repr__(self) -> str:
+        """Return a readable string representation of the zone."""
         return f"Zone(name={self.name!r})"
-
 
 # Convenience alias for code that previously referenced DEFAULT_ZONES directly
 DEFAULT_ZONES = get_zones()

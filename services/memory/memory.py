@@ -37,7 +37,7 @@ import numpy as np
 
 from libs.observability.metrics import redis_write_latency
 from libs.schemas.tracking import TrackLifecycleEvent, TrackState
-from libs.schemas.memory import TrackEvent, TrackSequence, ActionHint  # ← FIX: was missing
+from libs.schemas.memory import TrackEvent, TrackSequence, ActionHint
 from services.tracking.cross_camera_reid import CrossCameraReID
 
 logger = logging.getLogger(__name__)
@@ -371,7 +371,8 @@ class MemoryStore:
             events.append(TrackEvent(**data))
         if last_n is not None:
             events = events[-last_n:]
-        return TrackSequence(track_id=track_id, events=events)
+        zones = list(dict.fromkeys(e.zone for e in events if e.zone is not None))
+        return TrackSequence(track_id=track_id, events=events, zones_visited=zones)
 
     def get_zone_entry_count(self, track_id: int, zone: str) -> int:
         """
