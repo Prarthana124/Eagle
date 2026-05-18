@@ -38,7 +38,6 @@ import numpy as np
 from libs.observability.metrics import redis_write_latency
 from libs.schemas.memory import ActionHint, TrackEvent, TrackSequence
 from libs.schemas.tracking import TrackLifecycleEvent, TrackState
-from libs.schemas.memory import TrackEvent, TrackSequence
 from services.tracking.cross_camera_reid import CrossCameraReID
 
 logger = logging.getLogger(__name__)
@@ -323,8 +322,6 @@ class MemoryStore:
         Args:
             event: ``TrackEvent`` instance (from ``libs.schemas.memory``).
         """
-        from libs.schemas.memory import ActionHint
-
         key = self._seq_key(event.track_id)
         serialised = event.model_dump_json()
 
@@ -339,42 +336,6 @@ class MemoryStore:
                 pipe.incr(self._zone_count_key(event.track_id, event.zone))
 
         pipe.execute()
-
-    def get_sequence(self, track_id: int, last_n: Optional[int] = None):
-        """
-        Return a ``TrackSequence`` for the given track.
-
-        Args:
-            track_id: Track identifier.
-            last_n:   If given, return only the most recent *n* events.
-
-        Returns:
-            ``TrackSequence`` (empty if the track has no stored events).
-        """
-        from libs.schemas.memory import TrackEvent, TrackSequence
-
-        key = self._seq_key(track_id)
-        raw_list = self._r.lrange(key, -last_n, -1) if last_n else self._r.lrange(key, 0, -1)
-
-        events: list[TrackEvent] = []
-        for raw in raw_list:
-            try:
-                data = json.loads(raw if isinstance(raw, str) else raw.decode())
-                events.append(TrackEvent(**data))
-            except Exception:
-                continue
-
-        zones_raw = self._r.smembers(self._zones_key(track_id))
-        zones_visited = [z if isinstance(z, str) else z.decode() for z in zones_raw]
-        total_dwell = sum(e.dwell_time_seconds for e in events)
-
-        return TrackSequence(
-            track_id=track_id,
-            camera_id=self._camera_id,
-            events=events,
-            zones_visited=zones_visited,
-            total_dwell=total_dwell,
-        )
 
     def get_zone_entry_count(self, track_id: int, zone: str) -> int:
         """Return the number of times *track_id* has entered *zone*."""
