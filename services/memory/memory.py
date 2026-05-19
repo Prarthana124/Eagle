@@ -37,7 +37,6 @@ import numpy as np
 
 from libs.observability.metrics import redis_write_latency
 from libs.schemas.memory import (
-    ActionHint,
     TrackEvent,
     TrackSequence,
 )
@@ -312,7 +311,11 @@ class MemoryStore:
 
     def get_zone_entry_count(self, track_id: int, zone: str) -> int:
         seq = self.get_sequence(track_id)
-        return sum(1 for e in seq.events if e.zone == zone and e.action_hint == ActionHint.ZONE_ENTRY)
+        return sum(
+        1
+        for e in seq.events
+        if e.zone == zone and getattr(e, "action_hint", None) == "ZONE_ENTRY"
+    )
 
     def get_active_track_ids(self, camera_id: str) -> set[int]:
         members = self._r.smembers(self._active_key(camera_id))
