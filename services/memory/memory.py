@@ -315,52 +315,18 @@ class MemoryStore:
             zones_visited=zones_visited,
         )
 
-    def store_event(self, event) -> None:
-        """
-        Append a ``TrackEvent`` to the ring buffer for its track.
+    def get_zone_entry_count(self, track_id: int, zone: str) -> int:
+        seq = self.get_sequence(track_id)
+        return sum(
+        1
+        for e in seq.events
+        if e.zone == zone and getattr(e, "action_hint", None) == "ZONE_ENTRY"
+    )
 
-        Enforces the ``MAX_EVENTS_PER_TRACK`` cap by trimming the oldest
-        entry whenever the list exceeds the limit.  Also maintains the
-        zones-visited set, per-zone entry counts, and the active-tracks set.
-
-        Args:
-            event: ``TrackEvent`` instance (from ``libs.schemas.memory``).
-        """
-        from libs.schemas.memory import ActionHint
-
-        key = self._seq_key(event.track_id)
-        serialised = event.model_dump_json()
-
-        pipe = self._r.pipeline()
-        pipe.rpush(key, serialised)
-        pipe.ltrim(key, -MAX_EVENTS_PER_TRACK, -1)
-        pipe.sadd(self._active_key(), str(event.track_id))
-
-        if event.zone:
-            pipe.sadd(self._zones_key(event.track_id), event.zone)
-            if event.action_hint == ActionHint.ZONE_ENTRY:
-                pipe.incr(self._zone_count_key(event.track_id, event.zone))
-
-        pipe.execute()
-
-    def get_sequence(self, track_id: int, last_n: Optional[int] = None):
-        """
-        Return a ``TrackSequence`` for the given track.
-
-        Args:
-            track_id: Track identifier.
-            last_n:   If given, return only the most recent *n* events.
-
-        Returns:
-            ``TrackSequence`` (empty if the track has no stored events).
-        """
-        from libs.schemas.memory import TrackEvent, TrackSequence
-
-        key = self._seq_key(track_id)
-        raw_list = self._r.lrange(key, -last_n, -1) if last_n else self._r.lrange(key, 0, -1)
-
-        events: list[TrackEvent] = []
-        for raw in raw_list:
+    def get_active_track_ids(self, camera_id: str) -> set[int]:
+        members = self._r.smembers(self._active_key(camera_id))
+        result: set[int] = set()
+        for m in members:
             try:
                 data = json.loads(raw if isinstance(raw, str) else raw.decode())
                 events.append(TrackEvent(**data))
