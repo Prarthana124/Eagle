@@ -23,3 +23,8 @@ jobs:
         run: ruff check services/memory/ libs/schemas/memory.py
       - name: Test (no Redis required — uses fakeredis)
         run: pytest tests/test_memory.py -v --tb=short --cov=services/memory --cov-report=term-missing
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
