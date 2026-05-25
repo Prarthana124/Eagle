@@ -102,26 +102,26 @@ def analyze_sequence(track_id: int):
             "analysis_triggered": True
         }
         
-    except Exception as e:
+        except Exception as e:
 
-    workflow_failures_total.inc()
+        workflow_failures_total.inc()
 
-    duration = time.time() - start_time
+        duration = time.time() - start_time
 
-    category = classify_failure(e)
+        category = classify_failure(e)
 
-    history_manager.log_execution(
-        WorkflowExecutionRecord(
-            workflow_name="analyze_sequence",
-            task_id=str(track_id),
-            status=WorkflowStatus.FAILED,
-            retry_count=0,
-            duration_seconds=duration,
-            failure_category=category,
-            error_message=str(e),
+        history_manager.log_execution(
+            WorkflowExecutionRecord(
+                workflow_name="analyze_sequence",
+                task_id=str(track_id),
+                status=WorkflowStatus.FAILED,
+                retry_count=retry_count,
+                duration_seconds=duration,
+                failure_category=category,
+                error_message=str(e),
+            )
         )
-    )
 
-    logger.error(f"Error in analyze_sequence task: {e}")
+        logger.error(f"Error in analyze_sequence task: {e}")
 
-    raise
+        raise
