@@ -83,7 +83,7 @@ def analyze_sequence(track_id: int):
         
         # No mock inference return values - just confirming the logic was called
         duration = time.time() - start_time
-
+        
         workflow_duration_seconds.observe(duration)
 
         history_manager.log_execution(
@@ -106,6 +106,8 @@ def analyze_sequence(track_id: int):
             workflow_failures_total.inc()
 
             duration = time.time() - start_time
+
+            workflow_duration_seconds.observe(duration)
 
             category = classify_failure(e)
 
