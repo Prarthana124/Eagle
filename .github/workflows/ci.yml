@@ -1,10 +1,12 @@
-name: CI Build and Verify
+name: CI Pipeline
 
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -13,36 +15,32 @@ jobs:
       contents: read
 
     steps:
-    # Fix: Pin checkout with specific commit SHA and disable credential persistence
-    - name: Checkout Code
-      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      with:
-        persist-credentials: false
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    # Fix: Pin swap space action to a stable release hash
-    - name: Add Swap Space
-      uses: pierotofy/set-swap-space@49819abfb41bd9b44fb781159c033dba90353a7c # v1.0
-      with:
-        swap-size-gb: 4
+      - name: Set up Environment
+        uses: actions/setup-node@v4
+        with:
+          node-size: '18'
+          cache: 'npm'
 
-    # Fix: Pin Python setup action and remove conflicting cache key
-    - name: Set up Python
-      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
-      with:
-        python-version: '3.10'
+      - name: Install Dependencies
+        run: npm ci
 
-    # Fix: Clean up environment variables to only retain absolute memory constraints
-    - name: Configure Memory Mitigation Flags
-      run: |
-        echo "PIP_NO_CACHE_DIR=1" >> $GITHUB_ENV
-        echo "PIP_DEFAULT_TIMEOUT=100" >> $GITHUB_ENV
+      - name: Run CI Build and Verify
+        run: npm run build
 
-    - name: Install Base Project Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install .
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: build
 
-    # Fix: Run a meaningful verification check to ensure project structure is readable
-    - name: Verify Installation
-      run: |
-        python -c "import os; print('CI Environment built perfectly with zero memory leaks!')"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Memory and Reasoning Tests
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+        run: npm test
