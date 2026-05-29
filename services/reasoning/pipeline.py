@@ -12,6 +12,7 @@ Flow per call:
   8. Store alert in Redis sorted set
   9. Push to alert_queue for SSE streaming
 """
+import json
 from __future__ import annotations
 
 import asyncio
