@@ -50,3 +50,22 @@ def test_export_events_to_json(tmp_path):
         data = json.load(file)
 
     assert len(data) == 2
+
+
+def test_generate_event_is_deterministic_with_seed():
+    from datetime import datetime, timezone
+
+    fixed_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    event_one = generate_event(seed=42, timestamp=fixed_time)
+    event_two = generate_event(seed=42, timestamp=fixed_time)
+
+    assert event_one == event_two
+
+
+def test_generate_events_rejects_invalid_interval_seconds():
+    with pytest.raises(ValueError):
+        generate_events(count=3, interval_seconds=0)
+
+    with pytest.raises(ValueError):
+        generate_events(count=3, interval_seconds=-10)
