@@ -201,68 +201,47 @@ class Tracker:
             y1 = float(ltwh[1])
             x2 = x1 + float(ltwh[2])
             y2 = y1 + float(ltwh[3])
-            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
-            zones = [z.name for z in get_zones_for_point(cx, cy)]
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
 
-            # ── Lifecycle: BORN ───────────────────────────────────────────
+            matched_zones = get_zones_for_point(cx, cy)
+
+            ZONE_PRIORITY = {
+                "keypad_area": 2,
+                "restricted_door": 1,
+            }
+
+            matched_zones.sort(
+                key=lambda z: ZONE_PRIORITY.get(z.name, 0),
+                reverse=True,
+            )
+
+            zones = [z.name for z in matched_zones]
+
             if tid not in self._known_ids:
                 self._known_ids.add(tid)
-                self._emit_lifecycle(TrackState.BORN, tid, zones, 0.0)
-                logger.info(f"Track BORN: #{tid} in zones={zones}")
 
-            # ── Base Setup & Gap Calculation ──────────────────────────────
+                self._emit_lifecycle(
+                    TrackState.BORN,
+                    tid,
+                    zones,
+                    0.0,
+                )
+
+                logger.info(
+                    f"Track BORN: #{tid} in zones={zones}"
+                )
+
             prev = self._active_tracks.get(tid)
-            prev_traj = prev.trajectory if prev else []
 
-            # Compute gap_frames early so both Dwell Time and Trajectory can use it
-            gap_frames = max(0, self._frame_id - prev.last_seen_frame - 1) if prev is not None else 0
-
-            # ── Dwell time ────────────────────────────────────────────────
-            if prev:
-                # Add historic frames, the current frame, and the occlusion gap
-                dwell_frames = prev.dwell_time_frames + 1 + gap_frames
-            else:
-                dwell_frames = 1
+            dwell_frames = (
+                prev.dwell_time_frames + 1
+            ) if prev else 1
 
             dwell_secs = dwell_frames / self.fps
 
-            # ── Trajectory ────────────────────────────────────────────────
-            interpolated_points = []
-            max_gap = self.max_interpolation_gap
-
-            if prev is not None and 0 < gap_frames <= max_gap:
-                # Added guard condition below to prevent IndexError crashes
-                if prev.trajectory:
-                    last_pos = {"x": prev.trajectory[-1].x, "y": prev.trajectory[-1].y}
-                else:
-                    last_pos = {"x": cx, "y": cy}  # Fallback to current center coordinates
-
-                new_pos = {"x": cx, "y": cy}
-
-                # Check if previous data contains w and h bounding box metrics
-                if hasattr(prev, 'bbox') and len(prev.bbox) == 4:
-                    # Calculate old width and height from bbox: [x1, y1, x2, y2]
-                    last_pos["w"] = prev.bbox[2] - prev.bbox[0]
-                    last_pos["h"] = prev.bbox[3] - prev.bbox[1]
-                    # Current width and height
-                    new_pos["w"] = x2 - x1
-                    new_pos["h"] = y2 - y1
-
-                # Synthesize intermediate points and wrap them into TrajectoryPoint instances
-                interpolated_points = [
-                    TrajectoryPoint(
-                        x=p["x"],
-                        y=p["y"],
-                        frame_id=p["frame_id"],
-                        interpolated=True,
-                        w=p.get("w"),
-                        h=p.get("h")
-                    )
-                    for p in _interpolate_trajectory(last_pos, new_pos, gap_frames, prev.last_seen_frame + 1)
-                ]
-
-            # Generate the current frame real point
+            prev_traj = prev.trajectory if prev else []
             new_point = TrajectoryPoint(x=cx, y=cy, frame_id=self._frame_id)
 
             # Merge old history, calculated mid-gap points, and current point cleanly
@@ -281,9 +260,11 @@ class Tracker:
                 zones_present=zones,
                 last_seen_frame=self._frame_id,
             )
+
             self._active_tracks[tid] = obj
-            current_ids.add(tid)
             tracked_objects.append(obj)
+
+            current_ids.add(tid)
 
         active_tracks.set(len(tracked_objects))
         for obj in tracked_objects:
@@ -291,11 +272,18 @@ class Tracker:
 
         # ── Lifecycle: LOST for tracks that disappeared ────────────────────
         for tid, prev_obj in list(self._active_tracks.items()):
+
             if tid not in current_ids:
                 frames_since = self._frame_id - prev_obj.last_seen_frame
                 track = None
                 if frames_since == 1:
-                    track = next((t for t in raw_tracks if int(t.track_id) == tid), None)
+                    track = next(
+                        (
+                            t for t in raw_tracks
+                            if int(t.track_id) == tid
+                        ),
+                        None,
+                    )
 
                 embedding = None
                 if frames_since == 1:
