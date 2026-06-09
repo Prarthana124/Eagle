@@ -200,17 +200,27 @@ class MemoryService:
 
     @staticmethod
     def _track_key(camera_id: str, track_id: int) -> str:
+        """Return the Redis key for a per-track state blob."""
         return f"track:{camera_id}:{track_id}"
 
     @staticmethod
     def _event_key(camera_id: str, frame_id: int) -> str:
+        """Return the Redis key for a per-frame event list."""
         return f"event:{camera_id}:{frame_id}"
 
     def _load_record(self, camera_id: str, track_id: int) -> Optional[dict]:
+        """Load and deserialise a track record from Redis, or return None."""
         raw = self._r.get(self._track_key(camera_id, track_id))
         return json.loads(raw) if raw else None
 
-    def _update_record(self, event: TrackLifecycleEvent, state: str, anomalous: bool = False) -> None:
+    def _update_record(self, event: TrackLifecycleEvent, state: str) -> None:
+        """
+        Update an existing track record's state and timing fields in Redis.
+
+        Args:
+            event: Source lifecycle event supplying updated field values.
+            state: New state string (e.g. 'LOST', 'DEAD').
+        """
         record = self._load_record(event.camera_id, event.track_id) or {}
         record.update(
             {
@@ -234,6 +244,13 @@ class MemoryService:
         global_id: Optional[str],
         anomalous: bool = False,
     ) -> None:
+        """
+        Append a lifecycle event dict to the per-frame Redis event log.
+
+        Args:
+            event:     Source lifecycle event.
+            global_id: Assigned global identity string, or None.
+        """
         key = self._event_key(event.camera_id, event.frame_id)
         raw = self._r.get(key)
         evts: list[dict] = json.loads(raw) if raw else []
