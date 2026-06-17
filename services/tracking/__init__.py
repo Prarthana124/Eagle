@@ -7,7 +7,7 @@ sub-modules like ``cross_camera_reid`` without pulling in the full stack.
 from importlib import import_module
 from types import ModuleType
 
-__all__ = ["tracker"]
+__all__: list[str] = []
 
 
 def __getattr__(name: str) -> ModuleType:

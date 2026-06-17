@@ -69,6 +69,7 @@ def test_memory_import_does_not_require_cv2(monkeypatch):
     assert "cv2" not in sys.modules
     store = imported.MemoryStore(redis_client=fakeredis.FakeRedis(decode_responses=True))
     assert isinstance(store, imported.MemoryStore)
+    store.expire_track(999)
 
 
 def test_track_sequence_action_summary():
