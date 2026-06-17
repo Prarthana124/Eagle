@@ -66,6 +66,7 @@ def test_memory_import_does_not_require_cv2(monkeypatch):
 
     imported = importlib.import_module("services.memory.memory")
     assert hasattr(imported, "MemoryStore")
+    assert "cv2" not in sys.modules
 
 
 def test_track_sequence_action_summary():
