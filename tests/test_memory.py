@@ -70,6 +70,9 @@ def test_memory_import_does_not_require_cv2(monkeypatch):
     store = imported.MemoryStore(redis_client=fakeredis.FakeRedis(decode_responses=True))
     assert isinstance(store, imported.MemoryStore)
     store.expire_track(999)
+    tracking = importlib.import_module("services.tracking")
+    with pytest.raises(AttributeError):
+        getattr(tracking, "does_not_exist")
 
 
 def test_track_sequence_action_summary():
